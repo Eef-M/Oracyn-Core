@@ -1,0 +1,73 @@
+# ── Secrets & environment ─────────────────────────────────
+.env
+.env.local
+.env.production
+*.key
+*.pem
+secrets/
+
+# ── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+trading-bot-env/
+
+# ── AI / ML artifacts ─────────────────────────────────────
+backend/ml/model.pkl
+backend/ml/model_*.pkl
+backend/ml/*.joblib
+*.h5
+*.pt
+*.onnx
+checkpoints/
+
+# ── Database ──────────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+
+# ── Logs ──────────────────────────────────────────────────
+*.log
+logs/
+log/
+
+# ── Node / React ──────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+.npm
+
+# ── IDE & OS ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Testing & coverage ────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# ── Docker ────────────────────────────────────────────────
+# (docker-compose.yml tetap di-commit, tapi override lokal tidak)
+docker-compose.override.yml
+
+# ── Alembic (versions di-commit, tapi bukan cache-nya) ───
+backend/migrations/__pycache__/
