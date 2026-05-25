@@ -1,6 +1,4 @@
-# Trading Bot
-
-AI-powered crypto trading bot dengan FastAPI + React.
+# Oracyn Core
 
 ## Cara menjalankan
 
