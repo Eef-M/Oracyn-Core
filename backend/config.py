@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 class Settings(BaseSettings):
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
   TIMEFRAME: str = "1h"
 
   # Database
-  DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/oracyn_core"
+  DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/oracyn_core_db"
 
   # Redis
   REDIS_URL: str = "redis://localhost:6379"
