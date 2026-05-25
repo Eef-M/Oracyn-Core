@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 class Settings(BaseSettings):
@@ -7,27 +7,25 @@ class Settings(BaseSettings):
   DEBUG: bool = False
 
   # Exchange
-  BINANCE_API_KEY: str = ""
-  BINANCE_SECRET: str = ""
-  EXCHANGE: str = "binance"
-  SYMBOL: str = "BTC/USDT"
-  TIMEFRAME: str = "1h"
+  BINANCE_API_KEY: str
+  BINANCE_SECRET: str
+  EXCHANGE: str
+  SYMBOL: str
+  TIMEFRAME: str
 
   # Database
-  DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/oracyn_core_db"
+  DATABASE_URL: str 
 
   # Redis
-  REDIS_URL: str = "redis://localhost:6379"
+  REDIS_URL: str
 
   # Bot
-  BOT_ENAVLED: bool = False
-  INITIAL_CAPITAL: float = 10000.0
-  MAX_RISK_PER_TRADE: float = 0.02
-  STOP_LOSS_PCT: float = 0.03
+  BOT_ENABLED: bool
+  INITIAL_CAPITAL: float
+  MAX_RISK_PER_TRADE: float
+  STOP_LOSS_PCT: float
 
-  class config:
-    env_file = ".env"
-    env_file_encoding = "utf-8"
+  model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 @lru_cache()
 def get_settings() -> Settings:
