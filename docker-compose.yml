@@ -4,7 +4,7 @@ services:
 
   # ── PostgreSQL ─────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: oracyn_core_postgres
     restart: unless-stopped
     environment:
@@ -14,7 +14,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -23,7 +23,7 @@ services:
 
   # ── Redis ──────────────────────────────────────────────
   redis:
-    image: redis:7-alpine
+    image: redis:latest
     container_name: oracyn_core_redis
     restart: unless-stopped
     ports:
