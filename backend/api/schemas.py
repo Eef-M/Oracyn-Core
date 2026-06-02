@@ -22,7 +22,7 @@ class TradeOut(BaseModel):
   closed_at:   Optional[datetime]
 
   class Config:
-      from_attributes = True
+    from_attributes = True
 
 
 # ── Signal schemas ─────────────────────────────────────────
@@ -37,7 +37,7 @@ class SignalOut(BaseModel):
   created_at: datetime
 
   class Config:
-      from_attributes = True
+    from_attributes = True
 
 
 # ── Stats schemas ──────────────────────────────────────────
@@ -67,3 +67,24 @@ class LiveData(BaseModel):
   signal:     Optional[str]
   confidence: Optional[float]
   timestamp:  datetime
+
+# ── OHLCV schemas ──────────────────────────────────────────
+class OHLCVCandle(BaseModel):
+    timestamp: str
+    open:      float
+    high:      float
+    low:       float
+    close:     float
+    volume:    float
+
+# ── Ticker schemas ─────────────────────────────────────────
+class TickerOut(BaseModel):
+    symbol:     str
+    last:       float
+    bid:        float
+    ask:        float
+    high:       float
+    low:        float
+    volume:     float
+    change_pct: float
+    timestamp:  str
