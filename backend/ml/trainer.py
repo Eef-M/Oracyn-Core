@@ -29,13 +29,13 @@ def train_model(candles: list[dict]) -> dict:
   df     = engineer_features(df_raw)
 
   if len(df) < 100:
-    raise ValueError(f"Data terlalu sedikit: {len(df)} baris. Minimal 100.")
+    raise ValueError(f"Not enough data: {len(df)} rows. Minimum 100.")
 
   X = df[FEATURE_COLUMNS]
   y = df["target"]
 
-  print(f"[Trainer] Total data: {len(df)} baris")
-  print(f"[Trainer] Target distribusi: {y.value_counts().to_dict()}")
+  print(f"[Trainer] Total data: {len(df)} rows")
+  print(f"[Trainer] Target distribution: {y.value_counts().to_dict()}")
 
   # 2. Walk-forward validation — wajib untuk time series
   tscv    = TimeSeriesSplit(n_splits=5)
@@ -94,7 +94,7 @@ def train_model(candles: list[dict]) -> dict:
 
   # 4. Simpan model ke disk
   joblib.dump(final_model, MODEL_PATH)
-  print(f"[Trainer] Model disimpan ke: {MODEL_PATH}")
+  print(f"[Trainer] Model saved to: {MODEL_PATH}")
 
   # 5. Feature importance (dari base estimator pertama)
   try:

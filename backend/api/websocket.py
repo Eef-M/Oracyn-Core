@@ -2,63 +2,88 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from datetime import datetime
 import asyncio
 import json
-import random  # nanti diganti dengan data real dari exchange
 
-router = APIRouter()
+from backend.services.exchange import fetch_ticker
+from backend.services.bot_engine import bot
+from backend.config import get_settings
+
+settings = get_settings()
+router   = APIRouter()
 
 class ConnectionManager:
   """Manage multiple WebSocket connections."""
- 
+  
   def __init__(self):
-      self.active: list[WebSocket] = []
+    self.active: list[WebSocket] = []
 
   async def connect(self, ws: WebSocket):
-      await ws.accept()
-      self.active.append(ws)
+    await ws.accept()
+    self.active.append(ws)
+    print(f"[WS] Client connected — total: {len(self.active)}")
 
   def disconnect(self, ws: WebSocket):
-      if ws in self.active:
-          self.active.remove(ws)
+    if ws in self.active:
+      self.active.remove(ws)
+    print(f"[WS] Client disconnected — total: {len(self.active)}")
 
   async def broadcast(self, data: dict):
-      disconnected = []
-      for ws in self.active:
-          try:
-              await ws.send_text(json.dumps(data, default=str))
-          except Exception:
-              disconnected.append(ws)
-      for ws in disconnected:
-          self.disconnect(ws)
+    disconnected = []
+    for ws in self.active:
+      try:
+        await ws.send_text(json.dumps(data, default=str))
+      except Exception:
+        disconnected.append(ws)
+    for ws in disconnected:
+      self.disconnect(ws)
 
 manager = ConnectionManager()
 
 @router.websocket("/ws/live")
 async def live_feed(ws: WebSocket):
   """
-  Stream data live ke frontend setiap 3 detik.
-  Saat ini mengirim mock data — nanti diganti data real dari exchange.
+  Stream data live ke frontend setiap 5 detik:
+  - Harga terkini dari Binance
+  - Status bot (running/stopped, kapital)
+  - Sinyal terakhir
   """
   await manager.connect(ws)
   try:
-      base_price = 65000.0
-      while True:
-          # Mock price update — ganti dengan fetch dari ccxt
-          price = base_price + random.uniform(-200, 200)
-          signal = random.choice(["BUY", "SELL", "HOLD"])
-          confidence = round(random.uniform(0.5, 0.95), 3)
+    while True:
+      try:
+        # Fetch harga real dari Binance
+        ticker     = fetch_ticker(settings.SYMBOL)
+        bot_status = bot.get_status()
 
-          payload = {
-              "symbol": "BTC/USDT",
-              "price": round(price, 2),
-              "signal": signal,
-              "confidence": confidence,
-              "timestamp": datetime.utcnow().isoformat(),
-          }
-          await ws.send_text(json.dumps(payload))
-          await asyncio.sleep(3)
- 
+        payload = {
+          "type":      "live_update",
+          "symbol":    ticker["symbol"],
+          "price":     ticker["last"],
+          "change_pct": ticker["change_pct"],
+          "high":      ticker["high"],
+          "low":       ticker["low"],
+          "volume":    ticker["volume"],
+          "bot": {
+            "running":  bot_status["running"],
+            "is_paper": bot_status["is_paper"],
+            "capital":  bot_status["capital"],
+          },
+          "timestamp": datetime.utcnow().isoformat(),
+        }
+
+        await ws.send_text(json.dumps(payload, default=str))
+
+      except Exception as e:
+        # Kalau fetch gagal, kirim error tapi jangan putus koneksi
+        await ws.send_text(json.dumps({
+          "type":  "error",
+          "message": str(e),
+          "timestamp": datetime.utcnow().isoformat(),
+        }))
+
+        await asyncio.sleep(5)
+
   except WebSocketDisconnect:
-      manager.disconnect(ws)
+    manager.disconnect(ws)
   except Exception as e:
-      manager.disconnect(ws)
-      print(f"[WS] Error: {e}")
+    manager.disconnect(ws)
+    print(f"[WS] Error: {e}")
