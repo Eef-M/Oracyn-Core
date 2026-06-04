@@ -48,7 +48,7 @@ def fetch_and_store_ohlcv(
       saved += 1
 
   db.commit()
-  print(f"[DataFetcher] {symbol} {timeframe}: {saved} candle baru disimpan")
+  print(f"[DataFetcher] {symbol} {timeframe}: {saved} new candles saved")
   return candles
 
 def get_ohlcv_from_db(

@@ -28,7 +28,7 @@ def predict_signal(candles: list[dict]) -> dict:
     return {
       "signal":     "HOLD",
       "confidence": 0.0,
-      "reason":     "Model belum ditraining. Jalankan POST /api/ml/train dulu.",
+      "reason":     "The model hasn't been trained yet. POST /api/ml/train first.",
       "price":      candles[-1]["close"] if candles else 0,
       "timestamp":  datetime.utcnow().isoformat(),
     }
@@ -43,7 +43,7 @@ def predict_signal(candles: list[dict]) -> dict:
     return {
       "signal":     "HOLD",
       "confidence": 0.0,
-      "reason":     "Data tidak cukup untuk generate fitur.",
+      "reason":     "Not enough data to generate features.",
       "price":      candles[-1]["close"],
       "timestamp":  datetime.utcnow().isoformat(),
     }
