@@ -35,7 +35,7 @@ def get_exchange():
 			},
 		})
 
-	raise ValueError(f"Exchange '{name}' tidak didukung. Pilih: bybit, binance")
+	raise ValueError(f"Exchange '{name}' not supported. Select: bybit, binance")
 
 
 def fetch_ticker(symbol: str = None) -> dict:
