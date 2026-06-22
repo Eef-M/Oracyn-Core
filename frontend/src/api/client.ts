@@ -2,13 +2,12 @@ import axios from 'axios'
 
 const client = axios.create({
   baseURL: '/api',
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Response interceptor — log error ke console saat development
 client.interceptors.response.use(
   (response) => response,
   (error) => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { useMarketStore } from '../store/marketStore'
 import { useBotStore } from '../store/botStore'
 import type { LiveUpdate } from '../types'
@@ -7,33 +7,44 @@ const WS_URL = 'ws://localhost:8000/ws/live'
 const RECONNECT_DELAY = 3000
 
 export function useWebSocket() {
-  const ws = useRef<WebSocket | null>(null)
-  const reconnect = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isClosing = useRef(false)
+  const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTmRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef = useRef(false)
 
-  // Use selectors to ensure stable function references and prevent reconnection loops
-  const updatePrice = useMarketStore((state) => state.updatePrice)
-  const setCapital = useMarketStore((state) => state.setCapital)
-  const setStatus = useBotStore((state) => state.setStatus)
+  const updatePrice = useMarketStore((s) => s.updatePrice)
+  const setCapital = useMarketStore((s) => s.setCapital)
+  const setStatus = useBotStore((s) => s.setStatus)
 
-  // Didefinisikan dengan useCallback sebelum useEffect agar tidak ada
-  // "accessed before declared" error di TypeScript strict mode
-  const connect = useCallback(function connectImpl() {
-    if (isClosing.current) return
-    try {
-      ws.current = new WebSocket(WS_URL)
+  const actionsRef = useRef({ updatePrice, setCapital, setStatus })
 
-      ws.current.onopen = () => {
-        console.log('[WS] Connected')
-      }
+  useEffect(() => {
+    actionsRef.current = { updatePrice, setCapital, setStatus }
+  })
 
-      ws.current.onmessage = (event) => {
-        try {
-          const data: LiveUpdate = JSON.parse(event.data)
+  useEffect(() => {
+    isMountedRef.current = true
 
-          if (data.type === 'live_update') {
+    function connect() {
+      if (!isMountedRef.current) return
+      if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return
+
+      try {
+        const socket = new WebSocket(WS_URL)
+        wsRef.current = socket
+
+        socket.onopen = () => {
+          if (!isMountedRef.current) { socket.close(); return }
+          console.log('[WS] Connected')
+        }
+
+        socket.onmessage = (event) => {
+          if (!isMountedRef.current) return
+          try {
+            const data: LiveUpdate = JSON.parse(event.data)
+            if (data.type !== 'live_update') return
+
+            const { updatePrice, setCapital, setStatus } = actionsRef.current
             updatePrice(data.price, data.change_pct)
-
             if (data.bot) {
               setCapital(data.bot.capital)
               setStatus({
@@ -44,38 +55,45 @@ export function useWebSocket() {
                 capital: data.bot.capital,
               })
             }
-          } else if (data.type === 'error') {
-            console.error('[WS] Server error:', data.message)
+          } catch (e) {
+            console.error('[WS] Parse error:', e)
           }
-        } catch (e) {
-          console.error('[WS] Parse error:', e)
+        }
+
+        socket.onclose = () => {
+          if (!isMountedRef.current) return
+          console.log('[WS] Disconnected — reconnecting...')
+          reconnectTmRef.current = setTimeout(connect, RECONNECT_DELAY)
+        }
+
+        socket.onerror = () => {
+          // onclose dipanggil otomatis setelah onerror
+        }
+
+      } catch (e) {
+        console.error('[WS] Connection failed:', e)
+        if (isMountedRef.current) {
+          reconnectTmRef.current = setTimeout(connect, RECONNECT_DELAY)
         }
       }
-
-      ws.current.onclose = () => {
-        if (isClosing.current) return
-        console.log('[WS] Disconnected — reconnecting...')
-        reconnect.current = setTimeout(connectImpl, RECONNECT_DELAY)
-      }
-
-      ws.current.onerror = (err) => {
-        console.error('[WS] Error:', err)
-        ws.current?.close()
-      }
-
-    } catch (e) {
-      console.error('[WS] Connection failed:', e)
-      reconnect.current = setTimeout(connectImpl, RECONNECT_DELAY)
     }
-  }, [updatePrice, setCapital, setStatus])
 
-  useEffect(() => {
-    isClosing.current = false
     connect()
+
     return () => {
-      isClosing.current = true
-      if (reconnect.current) clearTimeout(reconnect.current)
-      ws.current?.close()
+      isMountedRef.current = false
+
+      if (reconnectTmRef.current) {
+        clearTimeout(reconnectTmRef.current)
+        reconnectTmRef.current = null
+      }
+
+      if (wsRef.current) {
+        wsRef.current.onclose = null
+        wsRef.current.onerror = null
+        wsRef.current.close()
+        wsRef.current = null
+      }
     }
-  }, [connect])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 }
