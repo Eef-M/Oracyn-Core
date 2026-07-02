@@ -9,9 +9,8 @@ from backend.config import get_settings
 settings = get_settings()
 
 # Threshold probabilitas untuk keputusan sinyal
-BUY_THRESHOLD  = 0.62   # probabilitas naik > 62% → BUY
-SELL_THRESHOLD = 0.40   # probabilitas naik < 40% → SELL
-                         # antara 40-62% → HOLD
+BUY_THRESHOLD  = 0.62
+SELL_THRESHOLD = 0.40
 
 
 def predict_signal(candles: list[dict]) -> dict:
@@ -19,7 +18,8 @@ def predict_signal(candles: list[dict]) -> dict:
   Generate sinyal trading dari data OHLCV terbaru.
 
   Args:
-    candles: list candle OHLCV (minimal 60 candle untuk indikator stabil)
+    candles: list candle OHLCV (minimal ~210 candle agar EMA200
+              dan indikator lain punya cukup data historis)
 
   Returns:
     dict berisi signal, confidence, price, dan detail indikator
@@ -28,36 +28,55 @@ def predict_signal(candles: list[dict]) -> dict:
     return {
       "signal":     "HOLD",
       "confidence": 0.0,
-      "reason":     "The model hasn't been trained yet. POST /api/ml/train first.",
+      "reason":     "Model belum ditraining. Jalankan POST /api/ml/train dulu.",
       "price":      candles[-1]["close"] if candles else 0,
       "timestamp":  datetime.utcnow().isoformat(),
     }
 
   model = load_model()
 
-  # Feature engineering
   df_raw = ohlcv_to_dataframe(candles)
-  df     = engineer_features(df_raw)
 
-  if df.empty:
+  # engineer_features sekarang butuh data lebih banyak karena EMA200
+  # — kalau data tidak cukup, baris terakhir akan ke-drop semua
+  if len(df_raw) < 210:
     return {
       "signal":     "HOLD",
       "confidence": 0.0,
-      "reason":     "Not enough data to generate features.",
-      "price":      candles[-1]["close"],
+      "reason":     f"Data tidak cukup ({len(df_raw)} candle). Minimal 210 untuk EMA200.",
+      "price":      float(df_raw["close"].iloc[-1]) if len(df_raw) > 0 else 0,
       "timestamp":  datetime.utcnow().isoformat(),
     }
 
-  # Ambil baris terakhir (kondisi pasar terkini)
+  # Untuk prediksi real-time, kita TIDAK exclude zona netral
+  # (parameter threshold_pct tidak relevan di sini karena kita hanya
+  # butuh baris fitur terakhir, bukan training target)
+  df = engineer_features(df_raw, horizon=6, threshold_pct=0.004)
+
+  # engineer_features bisa drop baris terakhir kalau exclude zona netral
+  # mengenai baris paling baru — jadi kita re-compute fitur saja tanpa
+  # bergantung pada kolom target untuk ambil baris terakhir
+  if df.empty:
+    # Fallback — hitung fitur tanpa dropna by target,
+    # ambil baris paling akhir yang valid
+    df_full = engineer_features(df_raw, horizon=6, threshold_pct=0.0)
+    if df_full.empty:
+      return {
+        "signal":     "HOLD",
+        "confidence": 0.0,
+        "reason":     "Data tidak cukup untuk generate fitur.",
+        "price":      float(df_raw["close"].iloc[-1]),
+        "timestamp":  datetime.utcnow().isoformat(),
+      }
+    df = df_full
+
   latest      = df[FEATURE_COLUMNS].iloc[[-1]]
   latest_row  = df.iloc[-1]
   price       = float(df_raw["close"].iloc[-1])
 
-  # Prediksi probabilitas
-  proba  = model.predict_proba(latest)[0]
-  prob_up = float(proba[1])   # probabilitas harga naik
+  proba   = model.predict_proba(latest)[0]
+  prob_up = float(proba[1])
 
-  # Tentukan sinyal
   if prob_up >= BUY_THRESHOLD:
     signal = "BUY"
   elif prob_up <= SELL_THRESHOLD:
@@ -72,12 +91,14 @@ def predict_signal(candles: list[dict]) -> dict:
     "symbol":     settings.SYMBOL,
     "timestamp":  datetime.utcnow().isoformat(),
     "indicators": {
-      "rsi_14":      round(float(latest_row["rsi_14"]), 2),
-      "macd":        round(float(latest_row["macd"]), 4),
-      "macd_signal": round(float(latest_row["macd_signal"]), 4),
-      "bb_pct":      round(float(latest_row["bb_pct"]), 4),
+      "rsi_14":       round(float(latest_row["rsi_14"]), 2),
+      "macd":         round(float(latest_row["macd"]), 4),
+      "macd_signal":  round(float(latest_row["macd_signal"]), 4),
+      "bb_pct":       round(float(latest_row["bb_pct"]), 4),
       "volume_ratio": round(float(latest_row["volume_ratio"]), 2),
-      "atr_pct":     round(float(latest_row["atr_pct"]), 4),
+      "atr_pct":      round(float(latest_row["atr_pct"]), 4),
+      "adx":          round(float(latest_row["adx"]), 2),
+      "above_ema_200": bool(latest_row["above_ema_200"]),
     },
     "thresholds": {
       "buy":  BUY_THRESHOLD,
