@@ -5,41 +5,61 @@ from pathlib import Path
 from xgboost import XGBClassifier
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, precision_score, recall_score
 
 from backend.ml.features import engineer_features, FEATURE_COLUMNS
 from backend.services.data_fetcher import ohlcv_to_dataframe
 
-# Path tempat model disimpan
 MODEL_PATH = Path(__file__).parent / "model.pkl"
 
 
-def train_model(candles: list[dict]) -> dict:
+def train_model(
+  candles: list[dict],
+  horizon: int = 6,
+  threshold_pct: float = 0.004,
+) -> dict:
   """
   Train model XGBoost dari data OHLCV.
 
   Args:
-    candles: list candle dict dari fetch_ohlcv atau DB
+    candles:       list candle dict dari fetch_ohlcv atau DB
+    horizon:       berapa candle ke depan target diukur
+    threshold_pct: ambang minimum gerakan harga dianggap sinyal (bukan noise)
 
   Returns:
     dict berisi metrics hasil training
   """
-  # 1. Konversi ke DataFrame & feature engineering
   df_raw = ohlcv_to_dataframe(candles)
-  df     = engineer_features(df_raw)
+  df     = engineer_features(df_raw, horizon=horizon, threshold_pct=threshold_pct)
 
-  if len(df) < 100:
-    raise ValueError(f"Not enough data: {len(df)} rows. Minimum 100.")
+  # Minimal data dinaikkan — dengan fitur lebih banyak (28 fitur),
+  # butuh lebih banyak sample agar tidak overfit
+  if len(df) < 300:
+    raise ValueError(
+      f"Data terlalu sedikit setelah exclude zona netral: {len(df)} baris. "
+      f"Minimal 300. Coba naikkan parameter limit saat fetch data, "
+      f"atau kecilkan threshold_pct."
+    )
 
   X = df[FEATURE_COLUMNS]
-  y = df["target"]
+  y = df["target"].astype(int)
 
-  print(f"[Trainer] Total data: {len(df)} rows")
-  print(f"[Trainer] Target distribution: {y.value_counts().to_dict()}")
+  print(f"[Trainer] Total data (setelah exclude zona netral): {len(df)} baris")
+  print(f"[Trainer] Target distribusi: {y.value_counts().to_dict()}")
 
-  # 2. Walk-forward validation — wajib untuk time series
+  # Cek class imbalance — kalau salah satu kelas terlalu dominan,
+  # model bisa "curang" dengan selalu prediksi kelas mayoritas
+  class_balance = y.value_counts(normalize=True)
+  if class_balance.min() < 0.35:
+    print(
+      f"[Trainer] ⚠ Peringatan: class imbalance terdeteksi "
+      f"({class_balance.to_dict()}). Pertimbangkan ubah threshold_pct."
+    )
+
   tscv    = TimeSeriesSplit(n_splits=5)
   metrics = []
+  precisions = []
+  recalls    = []
 
   base_model = XGBClassifier(
     n_estimators=300,
@@ -65,15 +85,26 @@ def train_model(candles: list[dict]) -> dict:
     )
 
     preds = base_model.predict(X_val)
-    acc   = accuracy_score(y_val, preds)
+    acc    = accuracy_score(y_val, preds)
+    # Precision & recall lebih informatif dari accuracy saja —
+    # accuracy bisa menipu kalau class imbalance
+    prec   = precision_score(y_val, preds, zero_division=0)
+    rec    = recall_score(y_val, preds, zero_division=0)
+
     metrics.append(acc)
-    print(f"[Trainer] Fold {fold + 1}/5 — Accuracy: {acc:.3f}")
+    precisions.append(prec)
+    recalls.append(rec)
+    print(
+      f"[Trainer] Fold {fold + 1}/5 — "
+      f"Accuracy: {acc:.3f} | Precision: {prec:.3f} | Recall: {rec:.3f}"
+    )
 
-  mean_acc = np.mean(metrics)
-  print(f"[Trainer] Mean accuracy: {mean_acc:.3f}")
+  mean_acc  = np.mean(metrics)
+  mean_prec = np.mean(precisions)
+  mean_rec  = np.mean(recalls)
+  print(f"[Trainer] Mean accuracy: {mean_acc:.3f} | precision: {mean_prec:.3f} | recall: {mean_rec:.3f}")
 
-  # 3. Train final model pada semua data
-  # Pakai CalibratedClassifierCV agar output probabilitas reliable
+  # Train final model pada semua data dengan kalibrasi probabilitas
   final_model = CalibratedClassifierCV(
     XGBClassifier(
       n_estimators=300,
@@ -92,32 +123,34 @@ def train_model(candles: list[dict]) -> dict:
   )
   final_model.fit(X, y)
 
-  # 4. Simpan model ke disk
   joblib.dump(final_model, MODEL_PATH)
-  print(f"[Trainer] Model saved to: {MODEL_PATH}")
+  print(f"[Trainer] Model disimpan ke: {MODEL_PATH}")
 
-  # 5. Feature importance (dari base estimator pertama)
   try:
     importances = base_model.feature_importances_
     feat_imp = dict(zip(FEATURE_COLUMNS, importances.tolist()))
-    top_features = sorted(feat_imp.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_features = sorted(feat_imp.items(), key=lambda x: x[1], reverse=True)[:8]
   except Exception:
     top_features = []
 
   return {
-    "status":        "success",
-    "total_samples": len(df),
-    "mean_accuracy": round(mean_acc, 4),
-    "fold_scores":   [round(m, 4) for m in metrics],
-    "top_features":  top_features,
-    "model_path":    str(MODEL_PATH),
+    "status":          "success",
+    "total_samples":   len(df),
+    "mean_accuracy":   round(mean_acc, 4),
+    "mean_precision":  round(mean_prec, 4),
+    "mean_recall":     round(mean_rec, 4),
+    "fold_scores":     [round(m, 4) for m in metrics],
+    "class_balance":   class_balance.to_dict(),
+    "top_features":    top_features,
+    "horizon":         horizon,
+    "threshold_pct":   threshold_pct,
+    "model_path":      str(MODEL_PATH),
   }
 
 
 def load_model():
-  """Load model dari disk. Return None kalau belum ada."""
   if not MODEL_PATH.exists():
-      return None
+    return None
   return joblib.load(MODEL_PATH)
 
 
