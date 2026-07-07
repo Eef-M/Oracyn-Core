@@ -16,7 +16,7 @@ MODEL_PATH = Path(__file__).parent / "model.pkl"
 def train_model(
   candles: list[dict],
   horizon: int = 6,
-  threshold_pct: float = 0.004,
+  threshold_pct: float = 0.005,
 ) -> dict:
   """
   Train model XGBoost dari data OHLCV.
@@ -24,7 +24,10 @@ def train_model(
   Args:
     candles:       list candle dict dari fetch_ohlcv atau DB
     horizon:       berapa candle ke depan target diukur
-    threshold_pct: ambang minimum gerakan harga dianggap sinyal (bukan noise)
+    threshold_pct: ambang minimum gerakan harga dianggap sinyal (bukan noise).
+                   Default 0.005 divalidasi via confidence_bucket_analysis.py —
+                   satu-satunya kombinasi dengan edge SELL yang signifikan
+                   secara konsisten di semua level confidence cutoff.
 
   Returns:
     dict berisi metrics hasil training
