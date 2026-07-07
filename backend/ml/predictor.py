@@ -8,7 +8,9 @@ from backend.config import get_settings
 
 settings = get_settings()
 
-# Threshold probabilitas untuk keputusan sinyal
+# ── Threshold probabilitas untuk keputusan sinyal ──────────────────────
+ENABLE_BUY_SIGNAL = False
+
 BUY_THRESHOLD  = 0.62
 SELL_THRESHOLD = 0.40
 
@@ -70,19 +72,30 @@ def predict_signal(candles: list[dict]) -> dict:
   proba   = model.predict_proba(latest)[0]
   prob_up = float(proba[1])
 
-  if prob_up >= BUY_THRESHOLD:
+  would_buy      = prob_up >= BUY_THRESHOLD
+  buy_suppressed = would_buy and not ENABLE_BUY_SIGNAL
+
+  if would_buy and ENABLE_BUY_SIGNAL:
     signal = "BUY"
   elif prob_up <= SELL_THRESHOLD:
     signal = "SELL"
   else:
     signal = "HOLD"
 
+  # ── signal_confidence: keyakinan terhadap ARAH sinyal ──────────────────
+  if signal == "SELL":
+    signal_confidence = round(1 - prob_up, 4)
+  else:
+    signal_confidence = round(prob_up, 4)
+
   return {
-    "signal":     signal,
-    "confidence": round(prob_up, 4),
-    "price":      round(price, 2),
-    "symbol":     settings.SYMBOL,
-    "timestamp":  datetime.utcnow().isoformat(),
+    "signal":            signal,
+    "confidence":        round(prob_up, 4),        # prob_up mentah — untuk logging/analisis
+    "signal_confidence": signal_confidence,          # keyakinan terhadap arah — untuk risk_manager
+    "price":             round(price, 2),
+    "symbol":            settings.SYMBOL,
+    "timestamp":         datetime.utcnow().isoformat(),
+    "buy_suppressed":    buy_suppressed,  # True = model mau BUY tapi ditahan (belum ada edge terbukti)
     "indicators": {
       "rsi_14":       round(float(latest_row["rsi_14"]), 2),
       "macd":         round(float(latest_row["macd"]), 4),
@@ -94,7 +107,8 @@ def predict_signal(candles: list[dict]) -> dict:
       "above_ema_200": bool(latest_row["above_ema_200"]),
     },
     "thresholds": {
-      "buy":  BUY_THRESHOLD,
-      "sell": SELL_THRESHOLD,
+      "buy":            BUY_THRESHOLD,
+      "sell":           SELL_THRESHOLD,
+      "buy_enabled":    ENABLE_BUY_SIGNAL,
     },
   }
