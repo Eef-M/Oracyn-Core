@@ -108,7 +108,7 @@ def train(
   timeframe:     str   = None,
   limit:         int   = 3000,     # dinaikkan dari 1000 — lebih banyak data
   horizon:       int   = 6,        # candle ke depan untuk target
-  threshold_pct: float = 0.004,    # 0.4% — zona netral di luar ini di-exclude
+  threshold_pct: float = 0.005,
   db:            Session = Depends(get_db),
 ):
   """
@@ -116,7 +116,8 @@ def train(
 
   - limit: jumlah candle (rekomendasi >= 2000 untuk hasil stabil)
   - horizon: berapa candle ke depan target diukur (default 6 = 6 jam di 1h)
-  - threshold_pct: ambang gerakan harga dianggap sinyal, bukan noise (default 0.4%)
+  - threshold_pct: ambang gerakan harga dianggap sinyal, bukan noise (default 0.5%,
+    hasil analisis out-of-fold confidence-bucket)
   """
   try:
     candles = fetch_and_store_ohlcv(db, symbol, timeframe, limit)

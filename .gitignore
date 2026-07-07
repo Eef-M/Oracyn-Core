@@ -73,6 +73,9 @@ docker-compose.override.yml
 backend/migrations/__pycache__/
 
 # ── Miscellaneous ─────────────────────────────────────────
-backend/train_sweep.py
-backend/sweep_results.json
-backend/sweep_results.csv
+train_sweep.py
+sweep_results.json
+sweep_results.csv
+confidence_bucket_analysis.py
+confidence_bucket_results.csv
+confidence_bucket_results.json

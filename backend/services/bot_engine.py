@@ -81,21 +81,22 @@ class BotEngine:
       candles = fetch_and_store_ohlcv(db, limit=250)
       result  = predict_signal(candles)
 
-      signal     = result["signal"]
-      confidence = result["confidence"]
-      indicators = result.get("indicators", {})
+      signal            = result["signal"]
+      confidence        = result["confidence"]           # prob_up mentah — untuk logging/riwayat sinyal
+      signal_confidence = result["signal_confidence"]     # keyakinan terhadap arah — untuk keputusan risk
+      indicators        = result.get("indicators", {})
 
       self._save_signal(db, signal, confidence, current_price, indicators)
-      print(f"[BotEngine] Sinyal: {signal} (confidence: {confidence:.2%})")
+      print(f"[BotEngine] Sinyal: {signal} (prob_up: {confidence:.2%}, confidence arah: {signal_confidence:.2%})")
 
       open_count = db.query(Trade).filter(Trade.status == TradeStatus.OPEN).count()
 
       allowed, reason = self.risk_manager.should_open_trade(
-        signal, confidence, open_count, self.capital
+        signal, signal_confidence, open_count, self.capital
       )
 
       if allowed:
-        await self._open_position(db, signal, confidence, current_price)
+        await self._open_position(db, signal, signal_confidence, current_price)
       else:
         print(f"[BotEngine] Trade dilewati: {reason}")
 
