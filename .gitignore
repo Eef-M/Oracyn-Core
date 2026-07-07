@@ -71,3 +71,8 @@ docker-compose.override.yml
 
 # ── Alembic (versions di-commit, tapi bukan cache-nya) ───
 backend/migrations/__pycache__/
+
+# ── Miscellaneous ─────────────────────────────────────────
+backend/train_sweep.py
+backend/sweep_results.json
+backend/sweep_results.csv

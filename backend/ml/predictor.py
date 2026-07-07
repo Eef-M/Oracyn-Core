@@ -48,27 +48,20 @@ def predict_signal(candles: list[dict]) -> dict:
       "timestamp":  datetime.utcnow().isoformat(),
     }
 
-  # Untuk prediksi real-time, kita TIDAK exclude zona netral
-  # (parameter threshold_pct tidak relevan di sini karena kita hanya
-  # butuh baris fitur terakhir, bukan training target)
-  df = engineer_features(df_raw, horizon=6, threshold_pct=0.004)
+  # Mode inference: compute_target=False — TIDAK menghitung target/future_return,
+  # sehingga candle paling baru tidak ikut terbuang oleh dropna (lihat fix di
+  # features.py). Ini memastikan sinyal dihasilkan dari candle yang benar-benar
+  # terkini, bukan tertinggal `horizon` candle di belakang.
+  df = engineer_features(df_raw, compute_target=False)
 
-  # engineer_features bisa drop baris terakhir kalau exclude zona netral
-  # mengenai baris paling baru — jadi kita re-compute fitur saja tanpa
-  # bergantung pada kolom target untuk ambil baris terakhir
   if df.empty:
-    # Fallback — hitung fitur tanpa dropna by target,
-    # ambil baris paling akhir yang valid
-    df_full = engineer_features(df_raw, horizon=6, threshold_pct=0.0)
-    if df_full.empty:
-      return {
-        "signal":     "HOLD",
-        "confidence": 0.0,
-        "reason":     "Data tidak cukup untuk generate fitur.",
-        "price":      float(df_raw["close"].iloc[-1]),
-        "timestamp":  datetime.utcnow().isoformat(),
-      }
-    df = df_full
+    return {
+      "signal":     "HOLD",
+      "confidence": 0.0,
+      "reason":     "Data tidak cukup untuk generate fitur.",
+      "price":      float(df_raw["close"].iloc[-1]),
+      "timestamp":  datetime.utcnow().isoformat(),
+    }
 
   latest      = df[FEATURE_COLUMNS].iloc[[-1]]
   latest_row  = df.iloc[-1]
