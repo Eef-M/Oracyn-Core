@@ -7,16 +7,21 @@ def engineer_features(
   df: pd.DataFrame,
   horizon: int = 6,
   threshold_pct: float = 0.004,
+  compute_target: bool = True,
 ) -> pd.DataFrame:
   """
   Hitung semua fitur teknikal dari data OHLCV mentah.
 
   Args:
-      df:            DataFrame dengan kolom timestamp, open, high, low, close, volume
-      horizon:       berapa candle ke depan target diukur (default 6 candle = 6 jam di 1h)
-      threshold_pct: ambang minimum gerakan harga untuk dianggap sinyal (bukan noise)
+    df:             DataFrame dengan kolom timestamp, open, high, low, close, volume
+    horizon:        berapa candle ke depan target diukur (default 6 candle = 6 jam di 1h)
+    threshold_pct:  ambang minimum gerakan harga untuk dianggap sinyal (bukan noise)
+    compute_target: True untuk training (butuh kolom target + label masa depan).
+                    False untuk inference real-time — TIDAK menghitung target sama
+                    sekali, sehingga baris terakhir (candle paling baru) tidak ikut
+                    terbuang oleh dropna. Gunakan False di predictor.py.
 
-  Output: DataFrame dengan tambahan kolom fitur + kolom 'target'
+  Output: DataFrame dengan tambahan kolom fitur (+ kolom 'target' bila compute_target=True)
   """
   df = df.copy()
 
@@ -90,6 +95,14 @@ def engineer_features(
   df["upper_wick"] = (df["high"] - df[["open", "close"]].max(axis=1)) / df["open"]
   df["lower_wick"] = (df[["open", "close"]].min(axis=1) - df["low"]) / df["open"]
   df["is_bullish"] = (df["close"] > df["open"]).astype(int)
+
+  if not compute_target:
+    # Mode inference (predictor.py) — TIDAK menghitung target/future_return
+    # sama sekali, supaya candle paling baru tidak ikut terbuang oleh dropna.
+    # Hanya buang baris dengan NaN di kolom fitur saja (efek rolling window
+    # EMA/RSI/dll di awal data), bukan karena target yang memang belum ada.
+    df = df.dropna(subset=FEATURE_COLUMNS)
+    return df
 
   # ── Target variable —──────────────────────
   future_return = df["close"].shift(-horizon) / df["close"] - 1
